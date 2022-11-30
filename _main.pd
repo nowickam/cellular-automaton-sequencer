@@ -1,4 +1,4 @@
-#N canvas 0 0 1328 1022 12;
+#N canvas 3 0 1328 1022 12;
 #X obj 40 26 loadbang;
 #X msg 41 118 1;
 #X obj 42 146 s triggerAutomaton;

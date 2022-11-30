@@ -1,6 +1,34 @@
+#include <Bela.h>
 /*
- * Default render file for Bela projects running Pd patches
- * using libpd.
+ ____  _____ _        _
+| __ )| ____| |      / \
+|  _ \|  _| | |     / _ \
+| |_) | |___| |___ / ___ \
+|____/|_____|_____/_/   \_\
+
+The platform for ultra-low latency audio and sensor processing
+
+http://bela.io
+
+A project of the Augmented Instruments Laboratory within the
+Centre for Digital Music at Queen Mary University of London.
+http://www.eecs.qmul.ac.uk/~andrewm
+
+(c) 2016 Augmented Instruments Laboratory: Andrew McPherson,
+    Astrid Bin, Liam Donovan, Christian Heinrichs, Robert Jack,
+    Giulio Moro, Laurel Pardue, Victor Zappi. All rights reserved.
+
+The Bela software is distributed under the GNU Lesser General Public License
+(LGPL 3.0), available here: https://www.gnu.org/licenses/lgpl-3.0.txt
+*/
+
+/*
+ *	USING A CUSTOM RENDER.CPP FILE FOR PUREDATA PATCHES - LIBPD
+ *  ===========================================================
+ *  ||                                                       ||
+ *  || OPEN THE ENCLOSED _main.pd PATCH FOR MORE INFORMATION ||
+ *  || ----------------------------------------------------- ||
+ *  ===========================================================
  */
 #include <Bela.h>
 
@@ -18,12 +46,7 @@ extern "C"
 #include <libraries/Scope/Scope.h>
 #include <string>
 #include <sstream>
-#include <algorithm>
-
-#include <signal.h>
-#include <unistd.h>
-#include "u8g2/U8g2LinuxI2C.h"
-#include <vector>
+#include <string.h>
 
 #define ENABLE_TRILL
 
@@ -166,14 +189,6 @@ void Bela_userSettings(BelaInitSettings *settings)
     settings->analogOutputsPersist = 0;
 }
 
-float *gInBuf;
-float *gOutBuf;
-#define PARSE_MIDI
-static std::vector<Midi *> midi;
-std::vector<std::string> gMidiPortNames;
-int gMidiVerbose = 1;
-const int kMidiVerbosePrintLevel = 1;
-
 // -------------------------------------------
 // AUTOMATON
 #define WIDTH 8
@@ -233,7 +248,7 @@ typedef enum
 } TargetMode;
 
 TargetMode gTargetMode = kTargetSingle; // can be changed with /targetMode
-OscReceiver oscReceiver;
+// OscReceiver oscReceiver;
 int gStop = 0;
 
 // Handle Ctrl-C by requesting that the audio rendering stop
@@ -256,6 +271,16 @@ static void switchTarget(int target)
 #endif // I2C_MUX
     gActiveTarget = target;
 }
+
+//-----------------------------------------
+
+float *gInBuf;
+float *gOutBuf;
+#define PARSE_MIDI
+static std::vector<Midi *> midi;
+std::vector<std::string> gMidiPortNames;
+int gMidiVerbose = 1;
+const int kMidiVerbosePrintLevel = 1;
 
 void dumpMidi()
 {
@@ -329,7 +354,7 @@ static unsigned int getPortChannel(int *channel)
 
 void Bela_MidiOutNoteOn(int channel, int pitch, int velocity)
 {
-    int port = getPortChannel(&channel);
+    unsigned int port = getPortChannel(&channel);
     if (gMidiVerbose >= kMidiVerbosePrintLevel)
         rt_printf("noteout _ port: %d, channel: %d, pitch: %d, velocity %d\n", port, channel, pitch, velocity);
     port < midi.size() && midi[port]->writeNoteOn(channel, pitch, velocity);
@@ -337,7 +362,7 @@ void Bela_MidiOutNoteOn(int channel, int pitch, int velocity)
 
 void Bela_MidiOutControlChange(int channel, int controller, int value)
 {
-    int port = getPortChannel(&channel);
+    unsigned int port = getPortChannel(&channel);
     if (gMidiVerbose >= kMidiVerbosePrintLevel)
         rt_printf("ctlout _ port: %d, channel: %d, controller: %d, value: %d\n", port, channel, controller, value);
     port < midi.size() && midi[port]->writeControlChange(channel, controller, value);
@@ -345,7 +370,7 @@ void Bela_MidiOutControlChange(int channel, int controller, int value)
 
 void Bela_MidiOutProgramChange(int channel, int program)
 {
-    int port = getPortChannel(&channel);
+    unsigned int port = getPortChannel(&channel);
     if (gMidiVerbose >= kMidiVerbosePrintLevel)
         rt_printf("pgmout _ port: %d, channel: %d, program: %d\n", port, channel, program);
     port < midi.size() && midi[port]->writeProgramChange(channel, program);
@@ -353,7 +378,7 @@ void Bela_MidiOutProgramChange(int channel, int program)
 
 void Bela_MidiOutPitchBend(int channel, int value)
 {
-    int port = getPortChannel(&channel);
+    unsigned int port = getPortChannel(&channel);
     if (gMidiVerbose >= kMidiVerbosePrintLevel)
         rt_printf("bendout _ port: %d, channel: %d, value: %d\n", port, channel, value);
     port < midi.size() && midi[port]->writePitchBend(channel, value);
@@ -361,7 +386,7 @@ void Bela_MidiOutPitchBend(int channel, int value)
 
 void Bela_MidiOutAftertouch(int channel, int pressure)
 {
-    int port = getPortChannel(&channel);
+    unsigned int port = getPortChannel(&channel);
     if (gMidiVerbose >= kMidiVerbosePrintLevel)
         rt_printf("touchout _ port: %d, channel: %d, pressure: %d\n", port, channel, pressure);
     port < midi.size() && midi[port]->writeChannelPressure(channel, pressure);
@@ -369,7 +394,7 @@ void Bela_MidiOutAftertouch(int channel, int pressure)
 
 void Bela_MidiOutPolyAftertouch(int channel, int pitch, int pressure)
 {
-    int port = getPortChannel(&channel);
+    unsigned int port = getPortChannel(&channel);
     if (gMidiVerbose >= kMidiVerbosePrintLevel)
         rt_printf("polytouchout _ port: %d, channel: %d, pitch: %d, pressure: %d\n", port, channel, pitch, pressure);
     port < midi.size() && midi[port]->writePolyphonicKeyPressure(channel, pitch, pressure);
@@ -385,7 +410,7 @@ void Bela_MidiOutByte(int port, int byte)
         rt_fprintf(stderr, "Port out of range, using port 0 instead\n");
         port = 0;
     }
-    port < midi.size() && midi[port]->writeOutput(byte);
+    port < (int)midi.size() && midi[port]->writeOutput(byte);
 }
 
 void Bela_printHook(const char *received)
@@ -461,21 +486,8 @@ void Bela_listHook(const char *source, int argc, t_atom *argv)
     }
 #endif // BELA_LIBPD_GUI
 }
-// void Bela_banghook(const char *s){
-// 	Bela_printHook("Bang!");
-// }
 void Bela_messageHook(const char *source, const char *symbol, int argc, t_atom *argv)
 {
-    // if (strncmp(source, "triggerAutomaton", 16) == 0)
-    //   {
-    //       gTriggerAutomaton = libpd_get_float(argv);
-
-    //       // send to Pd
-    //       libpd_start_message(1);
-    //       libpd_add_float(99);
-    //       libpd_finish_list("digitalFrame");
-    //       gTriggerAutomaton = 0;
-    //   }
     if (strcmp(source, "bela_setMidi") == 0)
     {
         if (0 == strcmp("verbose", symbol))
@@ -769,8 +781,8 @@ void fdLoop(void *arg)
 {
     while (!Bela_stopRequested())
     {
-        sys_doio();
-        usleep(3000);
+        if (!sys_doio(pd_this))
+            usleep(3000);
     }
 }
 #endif /* PD_THREADED_IO */
@@ -780,10 +792,9 @@ float *gScopeOut;
 void *gPatch;
 bool gDigitalEnabled = 0;
 
-int idx;
-
 bool setup(BelaContext *context, void *userData)
 {
+    // AUTOMATON
     ca[WIDTH / 2] = 1;
 #ifdef BELA_LIBPD_GUI
     gui.setup(context->projectName);
@@ -895,7 +906,6 @@ bool setup(BelaContext *context, void *userData)
     libpd_set_floathook(Bela_floatHook);
     libpd_set_listhook(Bela_listHook);
     libpd_set_messagehook(Bela_messageHook);
-    // libpd_set_banghook(Bela_banghook);
     libpd_set_noteonhook(Bela_MidiOutNoteOn);
     libpd_set_controlchangehook(Bela_MidiOutControlChange);
     libpd_set_programchangehook(Bela_MidiOutProgramChange);
@@ -932,6 +942,8 @@ bool setup(BelaContext *context, void *userData)
 #ifdef ENABLE_TRILL
     libpd_bind("bela_setTrill");
 #endif // ENABLE_TRILL
+
+    // AUTOMATON
     libpd_bind("triggerAutomaton");
 
     // open patch:
@@ -973,6 +985,7 @@ bool setup(BelaContext *context, void *userData)
 #endif // ENABLE_TRILL
     return true;
 
+    // AUTOMATON
     pinMode(context, 0, gInputPin, INPUT); // set input
 }
 
@@ -995,7 +1008,7 @@ void render(BelaContext *context, void *userData)
         {
             char payload[header.size];
             int ret = gGuiPipe.readRt(&payload[0], header.size);
-            if (header.size != ret)
+            if (int(header.size) != ret)
             {
                 break;
             }
@@ -1092,7 +1105,7 @@ void render(BelaContext *context, void *userData)
                 {
                     libpd_start_message(2 * touchSensor.getNumTouches() + 1);
                     libpd_add_float(touchSensor.getNumTouches());
-                    for (int i = 0; i < touchSensor.getNumTouches(); i++)
+                    for (unsigned int i = 0; i < touchSensor.getNumTouches(); i++)
                     {
                         libpd_add_float(touchSensor.touchLocation(i));
                         libpd_add_float(touchSensor.touchSize(i));
@@ -1116,7 +1129,7 @@ void render(BelaContext *context, void *userData)
             libpd_finish_message("bela_trill", sensorId);
         }
 
-        static int count = 0;
+        static unsigned int count = 0;
         unsigned int readIntervalSamples = touchSensorSleepInterval * context->audioSampleRate;
         count += context->audioFrames;
         if (count > readIntervalSamples)
@@ -1230,7 +1243,7 @@ void render(BelaContext *context, void *userData)
     for (unsigned int tick = 0; tick < numberOfPdBlocksToProcess; ++tick)
     {
         // audio input
-        for (int n = 0; n < context->audioInChannels; ++n)
+        for (unsigned int n = 0; n < context->audioInChannels; ++n)
         {
             memcpy(
                 gInBuf + n * gLibpdBlockSize,
@@ -1239,7 +1252,7 @@ void render(BelaContext *context, void *userData)
         }
 
         // analog input
-        for (int n = 0; n < context->analogInChannels; ++n)
+        for (unsigned int n = 0; n < context->analogInChannels; ++n)
         {
             memcpy(
                 gInBuf + gLibpdBlockSize * gFirstAnalogInChannel + n * gLibpdBlockSize,
@@ -1318,8 +1331,93 @@ void render(BelaContext *context, void *userData)
             scope.log(gScopeOut[0], gScopeOut[1], gScopeOut[2], gScopeOut[3]);
         }
 
+        // -------------------------------------------
+        // AUTOMATON
+        gPrevButtonStatus = gButtonStatus;
+        gButtonStatus = digitalRead(context, 0, gInputPin);
+
+        if (gPrevButtonStatus != gButtonStatus && gPrevButtonStatus == 0)
+            gChangeRule = true;
+
+        if (gTriggerAutomaton > 0)
+        {
+            if (gChangeRule)
+            {
+                for (int i = 0; i < 7; i++)
+                {
+                    gRule[i] = rand() % 3;
+                }
+                gChangeRule = false;
+            }
+
+            // send to Pd
+            automatonStep(ca, gRule);
+
+            libpd_start_message(WIDTH);
+            for (int i = 0; i < WIDTH; i++)
+            {
+                libpd_add_float(ca[i + 1]);
+            }
+            libpd_finish_list("automatonRow");
+            gTriggerAutomaton = 0;
+
+            libpd_start_message(1);
+            libpd_add_float(gButtonStatus);
+            libpd_finish_list("button");
+        }
+        // -------------------------------------------
+
+        if (0 == gDisplays.size())
+        {
+            fprintf(stderr, "No displays in gDisplays\n");
+            return 1;
+        }
+#ifdef I2C_MUX
+        if (gTca.initI2C_RW(gI2cBus, gMuxAddress, -1) || gTca.select(-1))
+        {
+            fprintf(stderr, "Unable to initialise the TCA9548A multiplexer. Are the address and bus correct?\n");
+            return 1;
+        }
+#endif // I2C_MUX
+        for (unsigned int n = 0; n < gDisplays.size(); ++n)
+        {
+            switchTarget(n);
+            U8G2 &u8g2 = gDisplays[gActiveTarget].d;
+#ifndef I2C_MUX
+            int mux = gDisplays[gActiveTarget].mux;
+            if (-1 != mux)
+            {
+                fprintf(stderr, "Display %u requires mux %d but I2C_MUX is disabled\n", n, mux);
+                return 1;
+            }
+#endif // I2C_MUX
+            u8g2.initDisplay();
+            u8g2.setPowerSave(0);
+            u8g2.clearBuffer();
+            u8g2.setFont(u8g2_font_4x6_tf);
+            u8g2.setFontRefHeightText();
+            u8g2.setFontPosTop();
+            u8g2.drawPixel(x, 0);
+            // u8g2.drawStr(0, 0, " ____  _____ _        _");
+            // u8g2.drawStr(0, 7, "| __ )| ____| |      / \\");
+            // u8g2.drawStr(0, 14, "|  _ \\|  _| | |     / _ \\");
+            // u8g2.drawStr(0, 21, "| |_) | |___| |___ / ___ \\");
+            // u8g2.drawStr(0, 28, "|____/|_____|_____/_/   \\_\\");
+            if (gDisplays.size() > 1)
+            {
+                std::string targetString = "Target ID: " + std::to_string(n);
+                u8g2.drawStr(0, 50, targetString.c_str());
+            }
+            u8g2.sendBuffer();
+        }
+        // Set up interrupt handler to catch Control-C and SIGTERM
+        signal(SIGINT, interrupt_handler);
+        signal(SIGTERM, interrupt_handler);
+        x = (x + 1) % 64;
+        //-----------------------------------------------
+
         // audio output
-        for (int n = 0; n < context->audioOutChannels; ++n)
+        for (unsigned int n = 0; n < context->audioOutChannels; ++n)
         {
             memcpy(
                 context->audioOut + tick * gLibpdBlockSize + n * context->audioFrames,
@@ -1328,7 +1426,7 @@ void render(BelaContext *context, void *userData)
         }
 
         // analog output
-        for (int n = 0; n < context->analogOutChannels; ++n)
+        for (unsigned int n = 0; n < context->analogOutChannels; ++n)
         {
             memcpy(
                 context->analogOut + tick * gLibpdBlockSize + n * context->analogFrames,
@@ -1336,89 +1434,6 @@ void render(BelaContext *context, void *userData)
                 sizeof(context->analogOut[0]) * gLibpdBlockSize);
         }
     }
-    // -------------------------------------------
-    // AUTOMATON
-    gPrevButtonStatus = gButtonStatus;
-    gButtonStatus = digitalRead(context, 0, gInputPin);
-
-    if (gPrevButtonStatus != gButtonStatus && gPrevButtonStatus == 0)
-        gChangeRule = true;
-
-    if (gTriggerAutomaton > 0)
-    {
-        if (gChangeRule)
-        {
-            for (int i = 0; i < 7; i++)
-            {
-                gRule[i] = rand() % 3;
-            }
-            gChangeRule = false;
-        }
-
-        // send to Pd
-        automatonStep(ca, gRule);
-
-        libpd_start_message(WIDTH);
-        for (int i = 0; i < WIDTH; i++)
-        {
-            libpd_add_float(ca[i + 1]);
-        }
-        libpd_finish_list("automatonRow");
-        gTriggerAutomaton = 0;
-
-        libpd_start_message(1);
-        libpd_add_float(gButtonStatus);
-        libpd_finish_list("button");
-    }
-    // -------------------------------------------
-
-    if (0 == gDisplays.size())
-    {
-        fprintf(stderr, "No displays in gDisplays\n");
-        return 1;
-    }
-#ifdef I2C_MUX
-    if (gTca.initI2C_RW(gI2cBus, gMuxAddress, -1) || gTca.select(-1))
-    {
-        fprintf(stderr, "Unable to initialise the TCA9548A multiplexer. Are the address and bus correct?\n");
-        return 1;
-    }
-#endif // I2C_MUX
-    for (unsigned int n = 0; n < gDisplays.size(); ++n)
-    {
-        switchTarget(n);
-        U8G2 &u8g2 = gDisplays[gActiveTarget].d;
-#ifndef I2C_MUX
-        int mux = gDisplays[gActiveTarget].mux;
-        if (-1 != mux)
-        {
-            fprintf(stderr, "Display %u requires mux %d but I2C_MUX is disabled\n", n, mux);
-            return 1;
-        }
-#endif // I2C_MUX
-        u8g2.initDisplay();
-        u8g2.setPowerSave(0);
-        u8g2.clearBuffer();
-        u8g2.setFont(u8g2_font_4x6_tf);
-        u8g2.setFontRefHeightText();
-        u8g2.setFontPosTop();
-        u8g2.drawPixel(x, 0);
-        // u8g2.drawStr(0, 0, " ____  _____ _        _");
-        // u8g2.drawStr(0, 7, "| __ )| ____| |      / \\");
-        // u8g2.drawStr(0, 14, "|  _ \\|  _| | |     / _ \\");
-        // u8g2.drawStr(0, 21, "| |_) | |___| |___ / ___ \\");
-        // u8g2.drawStr(0, 28, "|____/|_____|_____/_/   \\_\\");
-        if (gDisplays.size() > 1)
-        {
-            std::string targetString = "Target ID: " + std::to_string(n);
-            u8g2.drawStr(0, 50, targetString.c_str());
-        }
-        u8g2.sendBuffer();
-    }
-    // Set up interrupt handler to catch Control-C and SIGTERM
-    signal(SIGINT, interrupt_handler);
-    signal(SIGTERM, interrupt_handler);
-    x = (x + 1) % 64;
 }
 
 void cleanup(BelaContext *context, void *userData)
