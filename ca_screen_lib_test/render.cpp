@@ -198,13 +198,14 @@ void Bela_userSettings(BelaInitSettings *settings)
 
 // -------------------------------------------
 // AUTOMATON
+// width of the processed automaton
+// and width of the pixel
 #define WIDTH 8
 float gTriggerAutomaton = 0;
-int gPrevButtonStatus = 0;
-int gButtonStatus = 0;
 bool gChangeRule = false;
 int gRule[7] = {0, 1, 2, 1, 0, 0, 1};
 
+// automaotn
 int ca[WIDTH + 2] = {0};
 
 void automatonStep(int *ca, int *rule)
@@ -213,16 +214,19 @@ void automatonStep(int *ca, int *rule)
 
     std::copy(ca, ca + WIDTH + 2, caTmp);
 
+    // sum the neighbors on the top and get the according rule
     for (int i = 1; i < WIDTH + 1; i++)
     {
         ca[i] = rule[caTmp[i - 1] + caTmp[i] + caTmp[i + 1]];
     }
 }
 
+// buffer for drawing
 int gScreen[128][64];
 
 void drawAutomaton(int x, int y, int val)
 {
+    // draw pixels WIDTH wide
     for (int i = x * WIDTH; i < x * WIDTH + WIDTH; i++)
     {
         for (int j = y * WIDTH; j < y * WIDTH + WIDTH; j++)
@@ -232,10 +236,11 @@ void drawAutomaton(int x, int y, int val)
     }
 }
 
+// button
 int gInputPin = 7;
+int gPrevButtonStatus = 0;
+int gButtonStatus = 0;
 // -------------------------------------------
-
-int x = 0;
 
 const unsigned int gI2cBus = 1;
 
@@ -745,10 +750,13 @@ void Bela_messageHook(const char *source, const char *symbol, int argc, t_atom *
 
 void Bela_floatHook(const char *source, float value)
 {
+    // AUTOMATON
+    // process the incoming metro bang
     if (strncmp(source, "triggerAutomaton", 16) == 0)
     {
         gTriggerAutomaton = value;
     }
+    // -----------------------------------------------
 
     // let's make this as optimized as possible for built-in digital Out parsing
     // the built-in digital receivers are of the form "bela_digitalOutXX" where XX is between gLibpdDigitalChannelOffset and (gLibpdDigitalCHannelOffset+gDigitalChannelsInUse)
@@ -820,6 +828,7 @@ bool setup(BelaContext *context, void *userData)
     // AUTOMATON
     srand(time(NULL));
     ca[WIDTH / 2] = 1;
+    // --------------------
 #ifdef BELA_LIBPD_GUI
     gui.setup(context->projectName);
     gui.setControlDataCallback(guiControlDataCallback, nullptr);
@@ -968,7 +977,9 @@ bool setup(BelaContext *context, void *userData)
 #endif // ENABLE_TRILL
 
     // AUTOMATON
+    // bind the receiver with the string
     libpd_bind("triggerAutomaton");
+    // -------------------------------------
 
     // open patch:
     gPatch = libpd_openfile(file, folder);
@@ -1009,7 +1020,9 @@ bool setup(BelaContext *context, void *userData)
 #endif // ENABLE_TRILL
 
     // AUTOMATON
+    // connect the button with the pin
     pinMode(context, 0, gInputPin, INPUT); // set input
+    // ---------------------------------------------------
 
     if (0 == gDisplays.size())
     {
@@ -1405,26 +1418,33 @@ void render(BelaContext *context, void *userData)
 
         // -------------------------------------------
         // AUTOMATON
+        // read the button on every block
         gPrevButtonStatus = gButtonStatus;
         gButtonStatus = digitalRead(context, 0, gInputPin);
 
+        // set the flag for change
         if (gPrevButtonStatus != gButtonStatus && gPrevButtonStatus == 0)
             gChangeRule = true;
 
+        // on metro input
         if (gTriggerAutomaton > 0)
         {
             if (gChangeRule)
             {
+                // randomize the rules
+                // either add 1/0/-1 or completely random
                 for (int i = 0; i < WIDTH; i++)
                 {
-                    gRule[i] = rand() % 3;
+                    gRule[i] = max(min((gRule[i] + rand() % 3 - 1), 2), 0);
+                    // gRule[i] = rand() % 3;
                 }
                 gChangeRule = false;
             }
 
-            // send to Pd
+            // generate new row
             automatonStep(ca, gRule);
 
+            // send the row to PD
             libpd_start_message(WIDTH);
             for (int i = 1; i < WIDTH + 1; i++)
             {
@@ -1433,10 +1453,12 @@ void render(BelaContext *context, void *userData)
             libpd_finish_list("automatonRow");
             gTriggerAutomaton = 0;
 
-            libpd_start_message(1);
-            libpd_add_float(gButtonStatus);
-            libpd_finish_list("button");
+            // libpd_start_message(1);
+            // libpd_add_float(gButtonStatus);
+            // libpd_finish_list("button");
 
+            // draw in the buffer
+            // move the automaton down
             for (int x = 15; x > 0; x--)
             {
                 for (int y = 0; y < WIDTH; y++)
@@ -1444,12 +1466,13 @@ void render(BelaContext *context, void *userData)
                     drawAutomaton(x, y, gScreen[(x - 1) * WIDTH][y * WIDTH]);
                 }
             }
-
+            // draw the new row on top
             for (int y = 0; y < WIDTH; y++)
             {
                 drawAutomaton(0, y, ca[y + 1]);
             }
-
+            // draw on the screen
+            // pixels 8x8
             u8g2.clearBuffer();
             for (int x = 0; x < 128; x++)
             {
@@ -1462,8 +1485,6 @@ void render(BelaContext *context, void *userData)
             u8g2.sendBuffer();
         }
         // -------------------------------------------
-
-        //-----------------------------------------------
     }
 }
 
